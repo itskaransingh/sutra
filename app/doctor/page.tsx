@@ -16,7 +16,8 @@ import {
   Play,
   FileText,
   X,
-  ClipboardList
+  ClipboardList,
+  Trash2
 } from 'lucide-react';
 
 // --- Types ---
@@ -28,10 +29,10 @@ interface Message {
   type: MessageType;
   sender: string;
   isMe: boolean;
-  content?: string; // Raw text or placeholder
+  content?: string;
   timestamp: string;
   aiAnalysis?: {
-    isAnalyzed: boolean; // Has the user clicked "Transcribe"?
+    isAnalyzed: boolean;
     isLoading?: boolean;
     diagnosis?: string;
     plan?: string;
@@ -66,17 +67,18 @@ const MOCK_SUMMARY = {
   priorityAlert: "HIGH: Penicillin Allergy"
 };
 
-// --- Shadcn-like UI Primitives (Internal for Single File) ---
+// --- Shadcn-like UI Primitives ---
 
 const Button = ({ 
   children, variant = 'default', size = 'default', className = '', ...props 
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'default' | 'outline' | 'ghost' | 'secondary', size?: 'default' | 'sm' | 'icon' | 'lg' }) => {
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'default' | 'outline' | 'ghost' | 'secondary' | 'destructive', size?: 'default' | 'sm' | 'icon' | 'lg' }) => {
   const base = "inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-950 disabled:pointer-events-none disabled:opacity-50";
   const variants = {
     default: "bg-slate-900 text-slate-50 shadow hover:bg-slate-900/90",
     outline: "border border-slate-200 bg-white shadow-sm hover:bg-slate-100 hover:text-slate-900",
     ghost: "hover:bg-slate-100 hover:text-slate-900",
-    secondary: "bg-slate-100 text-slate-900 shadow-sm hover:bg-slate-100/80"
+    secondary: "bg-slate-100 text-slate-900 shadow-sm hover:bg-slate-100/80",
+    destructive: "bg-red-500 text-white shadow-sm hover:bg-red-600"
   };
   const sizes = {
     default: "h-9 px-4 py-2",
@@ -87,21 +89,88 @@ const Button = ({
   return <button className={`${base} ${variants[variant]} ${sizes[size]} ${className}`} {...props}>{children}</button>;
 };
 
-const Badge = ({ children, variant = 'default' }: { children: React.ReactNode, variant?: 'default' | 'outline' | 'destructive' | 'secondary' }) => {
+const Badge = ({ children, variant = 'default', className = '' }: { children: React.ReactNode, variant?: 'default' | 'outline' | 'destructive' | 'secondary', className?: string }) => {
   const styles = {
     default: "border-transparent bg-slate-900 text-slate-50 hover:bg-slate-900/80",
     secondary: "border-transparent bg-slate-100 text-slate-900 hover:bg-slate-100/80",
     outline: "text-slate-950 border-slate-200 bg-white",
     destructive: "border-transparent bg-red-500 text-slate-50 hover:bg-red-500/80",
   };
-  return <div className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none ${styles[variant]}`}>{children}</div>;
+  return <div className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none ${styles[variant]} ${className}`}>{children}</div>;
 };
 
 const Card = ({ children, className = '' }: { children: React.ReactNode, className?: string }) => (
   <div className={`rounded-xl border border-slate-200 bg-white text-slate-950 shadow-sm ${className}`}>{children}</div>
 );
 
-// --- Sub-Components ---
+// --- UPDATED COMPONENT: Voice Wave Visualizer (WhatsApp Style) ---
+
+const VoiceWave = () => {
+  // Generate a static set of "bars" but animate them randomly
+  // This simulates the "chatter" of a voice recording more accurately than a sine wave
+  return (
+    <div className="flex items-center gap-[2px] h-8 px-4">
+      {[...Array(25)].map((_, i) => (
+        <div
+          key={i}
+          className="w-[3px] bg-red-500 rounded-full"
+          style={{
+            animation: `pulse-height ${0.4 + Math.random() * 0.5}s ease-in-out infinite alternate`,
+            // Random delay to ensure they don't sync up
+            animationDelay: `${Math.random() * 0.5}s`
+          }}
+        />
+      ))}
+      <style jsx>{`
+        @keyframes pulse-height {
+          0% { height: 15%; opacity: 0.5; }
+          100% { height: 100%; opacity: 1; }
+        }
+      `}</style>
+    </div>
+  );
+};
+
+// --- NEW COMPONENT: Recording Indicator (Container) ---
+
+const RecordingIndicator = ({ onCancel, duration }: { onCancel: () => void, duration: number }) => {
+  // Format seconds into MM:SS
+  const formatTime = (totalSeconds: number) => {
+    const min = Math.floor(totalSeconds / 60);
+    const sec = totalSeconds % 60;
+    return `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div className="flex justify-center my-4 animate-in fade-in zoom-in duration-300">
+      <div className="bg-white pl-2 pr-4 py-2 rounded-full shadow-xl border border-slate-100 flex items-center gap-3">
+        
+        {/* Cancel Button */}
+        <button 
+          onClick={onCancel} 
+          className="h-8 w-8 flex items-center justify-center rounded-full text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"
+        >
+          <Trash2 size={18} />
+        </button>
+
+        {/* Timer - Made slightly larger/red to match WhatsApp recording state */}
+        <span className="text-sm font-mono font-semibold text-red-500 w-[50px] text-center">
+          {formatTime(duration)}
+        </span>
+
+        {/* The Visual Wave Component */}
+        <VoiceWave />
+
+        {/* Live Indicator */}
+        <div className="flex items-center gap-2 pl-2 border-l border-slate-100">
+             <Mic size={18} className="text-red-500 animate-pulse" fill="currentColor" />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Existing Sub-Components ---
 
 const ScanView = ({ onScan }: { onScan: () => void }) => {
   const [scanning, setScanning] = useState(false);
@@ -251,14 +320,8 @@ const MessageItem = ({ msg, onTranscribe }: { msg: Message, onTranscribe: (id: s
     );
   }
 
-  // Voice Note & Text Layout
   return (
     <div className={`flex gap-3 mb-6 ${msg.isMe ? 'flex-row-reverse' : ''}`}>
-      {/* Avatar Placeholder - Minimalist design often omits this for me/AI */}
-      {/* <div className={`h-8 w-8 shrink-0 rounded-full flex items-center justify-center border text-[10px] font-bold ${msg.isMe ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}>
-        {msg.isMe ? 'ME' : 'AI'}
-      </div> */}
-
       <div className={`flex flex-col gap-1 max-w-[85%] sm:max-w-[70%] ${msg.isMe ? 'items-end' : 'items-start'}`}>
         <div className={`rounded-2xl px-4 py-3 text-sm shadow-sm border ${
           msg.isMe 
@@ -267,7 +330,6 @@ const MessageItem = ({ msg, onTranscribe }: { msg: Message, onTranscribe: (id: s
         }`}>
           {msg.type === 'voice-note' ? (
             <div className="space-y-3">
-              {/* Audio Player Placeholder */}
               <div className="flex items-center gap-3">
                   <div className={`h-8 w-8 rounded-full flex items-center justify-center ${msg.isMe ? 'bg-slate-50 text-slate-900' : 'bg-slate-100 text-slate-900'}`}>
                     <Play size={14} fill="currentColor" />
@@ -283,9 +345,7 @@ const MessageItem = ({ msg, onTranscribe }: { msg: Message, onTranscribe: (id: s
                   </div>
               </div>
 
-              {/* Transcribe Action / Contextualized Text */}
               {msg.aiAnalysis?.isAnalyzed ? (
-                // Contextualized Text (Revealed on Click)
                 <div className="mt-3 pt-3 border-t border-slate-700/50 space-y-3 animate-in fade-in duration-500">
                   <div className="flex items-center gap-2 text-xs font-semibold text-yellow-300">
                     <FileText size={12} className="text-yellow-300" />
@@ -313,7 +373,6 @@ const MessageItem = ({ msg, onTranscribe }: { msg: Message, onTranscribe: (id: s
                   )}
                 </div>
               ) : (
-                // Transcribe Action
                 <Button 
                   variant="secondary" 
                   size="sm" 
@@ -334,7 +393,6 @@ const MessageItem = ({ msg, onTranscribe }: { msg: Message, onTranscribe: (id: s
               )}
             </div>
           ) : (
-            // Regular Text
             <p className={`${msg.isMe ? 'text-slate-50' : 'text-slate-800'}`}>{msg.content}</p>
           )}
         </div>
@@ -353,15 +411,22 @@ export default function DoctorPage() {
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
   const [inputText, setInputText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
+  const [recordDuration, setRecordDuration] = useState(0);
+  
   const bottomRef = useRef<HTMLDivElement>(null);
+  const recordingTimeoutRef = useRef<number | null>(null);
+  const durationIntervalRef = useRef<number | null>(null);
 
   const showSummaryCard = messages.length === 1 && messages[0].type === 'system';
 
   useEffect(() => {
-    // Only scroll smoothly if we're not recording (recording shows an overlay that might not need a scroll)
     if (!isRecording) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
+    return () => {
+      if (recordingTimeoutRef.current) clearTimeout(recordingTimeoutRef.current);
+      if (durationIntervalRef.current) clearInterval(durationIntervalRef.current);
+    };
   }, [messages, isRecording]);
 
   const handleSend = () => {
@@ -377,46 +442,69 @@ export default function DoctorPage() {
     setInputText('');
   };
 
+  const stopRecording = (canceled: boolean = false) => {
+    setIsRecording(false);
+    
+    // Cleanup timers
+    if (recordingTimeoutRef.current) clearTimeout(recordingTimeoutRef.current);
+    if (durationIntervalRef.current) clearInterval(durationIntervalRef.current);
+    recordingTimeoutRef.current = null;
+    durationIntervalRef.current = null;
+    setRecordDuration(0);
+
+    if (canceled) return;
+    
+    const newId = Date.now().toString();
+    setMessages(prev => [...prev, {
+      id: newId,
+      type: 'voice-note',
+      sender: 'Me',
+      isMe: true,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      aiAnalysis: {
+        isAnalyzed: false,
+        diagnosis: "Acute tonsillitis with mild dehydration.",
+        plan: "Prescribed Azithromycin (allergy note checked), increased fluid intake. Follow up in 3 days if fever persists.",
+        medications: ["Azithromycin 500mg", "Paracetamol", "ORS"]
+      }
+    }]);
+  }
+
   const startRecording = () => {
-    if (isRecording) return; // Prevent double recording
-
+    if (isRecording) {
+        stopRecording(false);
+        return;
+    }
+    
+    setInputText(''); 
     setIsRecording(true);
-    // Simulate recording stop after 3 seconds
-    setTimeout(() => {
-      setIsRecording(false);
-      const newId = Date.now().toString();
-      setMessages(prev => [...prev, {
-        id: newId,
-        type: 'voice-note',
-        sender: 'Me',
-        isMe: true,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        aiAnalysis: {
-          isAnalyzed: false, // Start unanalyzed
-          diagnosis: "Acute tonsillitis with mild dehydration.",
-          plan: "Prescribed Azithromycin (allergy note checked), increased fluid intake. Follow up in 3 days if fever persists.",
-          medications: ["Azithromycin 500mg", "Paracetamol", "ORS"]
-        }
-      }]);
-    }, 3000);
-  };
+    setRecordDuration(0);
 
+    // Start Timer
+    durationIntervalRef.current = setInterval(() => {
+      setRecordDuration(prev => prev + 1);
+    }, 1000) as unknown as number;
+    
+    // Auto-Stop after 5 seconds (simulated)
+    recordingTimeoutRef.current = setTimeout(() => {
+        stopRecording(false);
+    }, 5000) as unknown as number; 
+  };
+  
   const handleTranscribe = (msgId: string) => {
-    // 1. Set loading state
     setMessages(prev => prev.map(m => 
       m.id === msgId && m.aiAnalysis 
         ? { ...m, aiAnalysis: { ...m.aiAnalysis, isLoading: true } } 
         : m
     ));
 
-    // 2. Simulate AI delay
     setTimeout(() => {
       setMessages(prev => prev.map(m => 
         m.id === msgId && m.aiAnalysis 
           ? { ...m, aiAnalysis: { ...m.aiAnalysis, isLoading: false, isAnalyzed: true } } 
           : m
       ));
-    }, 1500); // Slightly longer analysis time
+    }, 1500);
   };
 
   const handleReferral = () => {
@@ -445,14 +533,14 @@ export default function DoctorPage() {
                <MessageItem key={msg.id} msg={msg} onTranscribe={handleTranscribe} />
             ))}
             
+            {/* NEW: Recording Indicator Component with separate VoiceWave */}
             {isRecording && (
-              <div className="flex justify-center my-4 animate-in fade-in zoom-in duration-300">
-                 <div className="bg-red-500 text-white px-4 py-2 rounded-full shadow-lg shadow-red-200 flex items-center gap-2">
-                    <div className="h-2 w-2 bg-white rounded-full animate-pulse" />
-                    <span className="text-xs font-semibold">Recording Voice Note... (Releases after 3s)</span>
-                 </div>
-              </div>
+              <RecordingIndicator 
+                onCancel={() => stopRecording(true)} 
+                duration={recordDuration}
+              />
             )}
+            
             <div ref={bottomRef} />
           </div>
       </main>
@@ -461,12 +549,16 @@ export default function DoctorPage() {
       <div className="bg-white border-t border-slate-200 p-4 shrink-0 pb-safe">
         <div className="max-w-2xl mx-auto flex items-end gap-2">
           
-          {/* Referral Button */}
-          <Button variant="outline" size="icon" onClick={handleReferral} className="shrink-0 rounded-full h-10 w-10 text-slate-500">
+          <Button 
+            variant="outline" 
+            size="icon" 
+            onClick={handleReferral} 
+            className="shrink-0 rounded-full h-10 w-10 text-slate-500"
+            disabled={isRecording}
+          >
             <UserPlus size={18} />
           </Button>
 
-          {/* Text Input */}
           <div className="flex-1 bg-slate-100 rounded-3xl flex items-center gap-2 px-4 py-2 border border-transparent focus-within:border-slate-300 focus-within:bg-white transition-all">
             <input 
               type="text" 
@@ -479,14 +571,18 @@ export default function DoctorPage() {
             />
           </div>
 
-          {/* Send / Mic Button */}
           <Button 
               variant={inputText.trim() ? "default" : isRecording ? "destructive" : "secondary"}
               size="icon" 
               onClick={inputText.trim() ? handleSend : startRecording}
               className={`rounded-full h-10 w-10 shrink-0 transition-all ${!inputText.trim() && !isRecording ? 'bg-slate-100 text-slate-900 hover:bg-slate-200' : ''}`}
           >
-            {inputText.trim() ? <Send size={18} /> : isRecording ? <X size={18} /> : <Mic size={18} />}
+            {inputText.trim() 
+              ? <Send size={18} /> 
+              : isRecording 
+                  ? <Mic size={18} className="animate-pulse" /> 
+                  : <Mic size={18} />
+            }
           </Button>
         </div>
       </div>
