@@ -35,7 +35,7 @@ export function MessageList({
   }
 
   return (
-    <div className="px-4 py-4 space-y-3">
+    <div className="px-3 py-2 space-y-2">
       {messages.map((message) => {
         const isOwnMessage =
           (isPatient && message.sender_type === "patient") ||

@@ -33,7 +33,6 @@ export function SessionClient({
   currentDoctorId,
   currentDoctorName,
 }: SessionClientProps) {
-  const supabase = createClient();
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [showReferral, setShowReferral] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -45,20 +44,25 @@ export function SessionClient({
 
   // Real-time subscription
   useEffect(() => {
+    const supabase = createClient();
+    const sessionId = session.id;
+    
+    console.log('[Realtime] Setting up subscription for session:', sessionId);
+    
     const channel = supabase
-      .channel(`session-${session.id}`)
+      .channel(`session-${sessionId}`)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "messages",
-          filter: `session_id=eq.${session.id}`,
+          filter: `session_id=eq.${sessionId}`,
         },
         (payload) => {
+          console.log('[Realtime] Received message:', payload);
           const newMessage = payload.new as Message;
           setMessages((prev) => {
-            // Avoid duplicates
             if (prev.some((m) => m.id === newMessage.id)) {
               return prev;
             }
@@ -66,12 +70,15 @@ export function SessionClient({
           });
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        console.log('[Realtime] Subscription status:', status, err);
+      });
 
     return () => {
+      console.log('[Realtime] Cleaning up subscription');
       supabase.removeChannel(channel);
     };
-  }, [session.id, supabase]);
+  }, [session.id]);
 
   const handleNewMessage = (message: Message) => {
     // Optimistic update - message will also come via real-time
@@ -118,7 +125,7 @@ export function SessionClient({
       )}
 
       {/* Messages */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto pb-24">
         <div className="max-w-2xl mx-auto">
           <MessageList
             messages={messages}
@@ -131,8 +138,8 @@ export function SessionClient({
         </div>
       </main>
 
-      {/* Message Input */}
-      <div className="border-t bg-background safe-bottom">
+      {/* Message Input - Sticky */}
+      <div className="fixed bottom-0 left-0 right-0 bg-background/80 backdrop-blur-lg border-t safe-bottom z-40">
         <div className="max-w-2xl mx-auto">
           <MessageInput
             sessionId={session.id}

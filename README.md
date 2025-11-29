@@ -2,7 +2,7 @@
 
 > **Patient's story, shared, and powered by agentic AI.**
 
-Built for MumbaiHacks 2024 - 16hr Agentic AI Hackathon (HealthTech Track)
+Built for MumbaiHacks 2025 - 16hr Agentic AI Hackathon (HealthTech Track)
 
 ## The Problem
 

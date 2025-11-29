@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import type { Message, TextMessageContent } from "@/lib/types/database";
+import type { Message, TextMessageContent, UploadMessageContent } from "@/lib/types/database";
 
 export async function sendTextMessage(
   sessionId: string,
@@ -175,3 +175,81 @@ export async function sendVoiceMessage(
   return { message };
 }
 
+export async function sendFileMessage(
+  sessionId: string,
+  senderId: string,
+  senderType: "patient" | "doctor",
+  fileUrl: string,
+  fileType: "image" | "pdf" | "other",
+  fileName: string
+): Promise<{ message?: Message; error?: string }> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "Unauthorized" };
+  }
+
+  // Verify sender has access to session
+  const { data: session } = await supabase
+    .from("sessions")
+    .select("id, patient_id")
+    .eq("id", sessionId)
+    .single();
+
+  if (!session) {
+    return { error: "Session not found" };
+  }
+
+  // Verify access
+  if (senderType === "patient" && session.patient_id !== user.id) {
+    return { error: "Unauthorized" };
+  }
+
+  if (senderType === "doctor") {
+    const { data: participant } = await supabase
+      .from("session_participants")
+      .select("id, doctor:doctors(anonymous_id)")
+      .eq("session_id", sessionId)
+      .eq("doctor_id", senderId)
+      .single();
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const doctorData = participant?.doctor as any;
+    const anonymousId = Array.isArray(doctorData)
+      ? doctorData[0]?.anonymous_id
+      : doctorData?.anonymous_id;
+
+    if (!participant || anonymousId !== user.id) {
+      return { error: "Unauthorized" };
+    }
+  }
+
+  const content: UploadMessageContent = {
+    file_url: fileUrl,
+    file_type: fileType,
+    file_name: fileName,
+  };
+
+  const { data: message, error } = await supabase
+    .from("messages")
+    .insert({
+      session_id: sessionId,
+      sender_type: senderType,
+      sender_id: senderId,
+      message_type: "upload",
+      content,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("File message insert error:", error);
+    return { error: "Failed to send file message" };
+  }
+
+  return { message };
+}

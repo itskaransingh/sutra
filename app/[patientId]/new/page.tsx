@@ -28,6 +28,8 @@ export default async function NewSessionPage({ params }: Props) {
     .single();
 
   if (patientError || !patient || !patient.onboarded) {
+    console.error(patientError);
+    console.error(patient);
     // Invalid patient ID
     redirect("/?error=invalid_patient");
   }

@@ -204,8 +204,12 @@ ALTER TABLE medicine_todos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE follow_up_reminders ENABLE ROW LEVEL SECURITY;
 
 -- USERS: Patients can read/write their own data
-CREATE POLICY "Users can view own profile" ON users
-  FOR SELECT USING (auth.uid() = id);
+
+CREATE POLICY "Anyone can view patient profiles"
+ON "public"."users"
+FOR SELECT
+TO public
+USING (true);
 
 CREATE POLICY "Users can update own profile" ON users
   FOR UPDATE USING (auth.uid() = id);
@@ -220,49 +224,19 @@ CREATE POLICY "Doctors can insert own record" ON doctors
 CREATE POLICY "Doctors can update own record" ON doctors
   FOR UPDATE USING (auth.uid() = anonymous_id);
 
--- SESSIONS: Patients see their sessions, doctors see sessions they're in
-CREATE POLICY "Patients can view own sessions" ON sessions
-  FOR SELECT USING (auth.uid() = patient_id);
+-- SESSIONS: Simplified for hackathon - any authenticated user can view/create
+CREATE POLICY "Authenticated can view sessions" ON sessions
+  FOR SELECT TO authenticated USING (true);
 
-CREATE POLICY "Doctors can view sessions they participate in" ON sessions
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM session_participants sp
-      JOIN doctors d ON d.id = sp.doctor_id
-      WHERE sp.session_id = sessions.id AND d.anonymous_id = auth.uid()
-    )
-  );
+CREATE POLICY "Authenticated can create sessions" ON sessions
+  FOR INSERT TO authenticated WITH CHECK (true);
 
-CREATE POLICY "Doctors can create sessions" ON sessions
-  FOR INSERT WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM doctors d WHERE d.anonymous_id = auth.uid()
-    )
-  );
+-- SESSION_PARTICIPANTS: Simplified for hackathon
+CREATE POLICY "Authenticated can view session_participants" ON session_participants
+  FOR SELECT TO authenticated USING (true);
 
--- SESSION_PARTICIPANTS: Visible to patients and participating doctors
-CREATE POLICY "Patients can view session participants" ON session_participants
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM sessions s WHERE s.id = session_participants.session_id AND s.patient_id = auth.uid()
-    )
-  );
-
-CREATE POLICY "Doctors can view session participants" ON session_participants
-  FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM doctors d 
-      WHERE d.anonymous_id = auth.uid() 
-      AND d.id IN (SELECT doctor_id FROM session_participants WHERE session_id = session_participants.session_id)
-    )
-  );
-
-CREATE POLICY "Doctors can join sessions" ON session_participants
-  FOR INSERT WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM doctors d WHERE d.id = session_participants.doctor_id AND d.anonymous_id = auth.uid()
-    )
-  );
+CREATE POLICY "Authenticated can join sessions" ON session_participants
+  FOR INSERT TO authenticated WITH CHECK (true);
 
 -- MESSAGES: Visible to patients and session participants
 CREATE POLICY "Patients can view messages in own sessions" ON messages
