@@ -1,0 +1,420 @@
+# Sutra - Cursor Rules
+# Patient's story, shared, and powered by agentic AI.
+# MumbaiHacks 2024 - 16hr Agentic AI Hackathon (HealthTech)
+
+## Project Context
+
+You are building "Sutra", a healthcare communication platform that bridges the context gap between patients and doctors. Patients have a permanent QR code (Sutra ID) that doctors scan to access medical history and create chat sessions. AI processes voice notes to extract medical entities, generate summaries, and power copilot features.
+
+**CRITICAL**: This is a 16-hour hackathon. Prioritize working features over perfect code. Ship fast, iterate.
+
+---
+
+## Tech Stack
+
+- **Frontend**: Next.js 16 (App Router), React 19, TypeScript
+- **Styling**: TailwindCSS 4 (new CSS-first config), tw-animate-css
+- **UI Components**: Custom components in `/components/ui/`, Lucide React icons
+- **Auth**: Supabase Auth (Google OAuth for patients, Anonymous auth for doctors)
+- **Database**: Supabase PostgreSQL with JSONB for flexible medical data
+- **Real-time**: Supabase Realtime for chat messages
+- **Storage**: Supabase Storage for voice notes and file uploads
+- **AI Backend**: Separate Python workspace (FastAPI + LangGraph) - communicate via REST + SSE
+
+---
+
+## Architecture Decisions
+
+### Route Structure
+```
+/                           → Landing (redirect to /me if patient, show login)
+/auth/onboarding           → Patient onboarding wizard
+/me                        → Patient dashboard (bottom nav: Home | Meds | Copilot)
+/me/qr                     → Full-screen Sutra ID QR
+/[userId]/new              → Creates session, redirects to /[userId]/[sessionId]
+/[userId]/[sessionId]      → Chat session page
+/doctor                    → Doctor dashboard (bottom nav: Sessions | Copilot)
+```
+
+### User Types
+1. **Patient**: Authenticated via Google OAuth, has `users` table entry, `onboarded=true`
+2. **Doctor**: Anonymous Supabase user, tracked in `doctors` table by `anonymous_id`
+
+### Session Flow
+1. Doctor scans patient's QR → `/[userId]/new`
+2. If no anonymous session, create anonymous user
+3. Create or retrieve doctor record
+4. Create new session, redirect to `/[userId]/[sessionId]`
+5. Doctor sees Health State Card + chat interface
+
+### Referral Flow
+1. Doctor creates referral in session → generates unique code
+2. Referral message appears in chat with QR
+3. New doctor scans referral QR → joins SAME session as participant
+4. New doctor sees all previous messages
+
+---
+
+## Coding Standards
+
+### TypeScript
+- Use strict TypeScript, avoid `any`
+- Define interfaces for all data structures
+- Use Zod for runtime validation where needed
+
+### React/Next.js Patterns
+```typescript
+// Server Components by default
+export default async function Page() {
+  const supabase = await createClient()
+  // Fetch data server-side
+}
+
+// Client Components when needed (interactivity, hooks)
+'use client'
+export default function InteractiveComponent() {
+  const [state, setState] = useState()
+}
+```
+
+### Supabase Patterns
+```typescript
+// Server-side (Server Components, Route Handlers)
+import { createClient } from '@/lib/supabase/server'
+
+// Client-side (Client Components)
+import { createClient } from '@/lib/supabase/client'
+
+// Real-time subscription
+const channel = supabase
+  .channel('session-messages')
+  .on('postgres_changes', { 
+    event: 'INSERT', 
+    schema: 'public', 
+    table: 'messages',
+    filter: `session_id=eq.${sessionId}`
+  }, handleNewMessage)
+  .subscribe()
+```
+
+### Component Structure
+```
+/components
+  /ui              → Reusable primitives (Button, Card, Input, etc.)
+  /patient         → Patient-specific components
+  /doctor          → Doctor-specific components
+  /session         → Chat session components
+  /shared          → Shared across user types
+```
+
+### File Naming
+- Components: PascalCase (`HealthStateCard.tsx`)
+- Utilities: camelCase (`formatDate.ts`)
+- Types: PascalCase with `.types.ts` suffix or in component file
+- Hooks: camelCase with `use` prefix (`useSession.ts`)
+
+---
+
+## Database Conventions
+
+### Tables
+- `users` - Patients (authenticated)
+- `doctors` - Doctors (anonymous users)
+- `sessions` - Chat sessions
+- `session_participants` - Doctors in each session
+- `messages` - All message types in sessions
+- `referrals` - Referral records
+- `medicine_todos` - Extracted medicine tasks
+- `follow_up_reminders` - Extracted follow-ups
+
+### JSONB Usage
+Use JSONB for flexible, nested medical data:
+- `users.personal_details` - DOB, gender, blood type, emergency contact
+- `users.medical_profile` - Allergies, conditions, medications
+- `messages.content` - Varies by message_type
+- `messages.ai_processed` - Transcription, summary, entities
+
+### Row Level Security (RLS)
+```sql
+-- Patients can read/write their own data
+-- Doctors can read patient data if in same session
+-- Doctors can write to sessions they're participants in
+```
+
+---
+
+## API Integration (Python Backend)
+
+### Endpoints
+```typescript
+const AI_API_URL = process.env.NEXT_PUBLIC_AI_API_URL
+
+// Voice processing (SSE for streaming)
+POST /api/voice/process
+{ audio_base64: string, language_hint?: string }
+→ SSE stream: { transcription, summary, entities }
+
+// Copilot chat (SSE for streaming)
+POST /api/copilot/chat
+{ user_type: 'patient' | 'doctor', user_id: string, message: string }
+→ SSE stream: { type: 'text' | 'ui_component', content: any }
+
+// Health state generation
+POST /api/health-state/generate
+{ patient_id: string }
+→ { health_state_card: HealthStateCard }
+```
+
+### SSE Handling
+```typescript
+async function streamFromAI(endpoint: string, body: object) {
+  const response = await fetch(`${AI_API_URL}${endpoint}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  
+  const reader = response.body?.getReader()
+  const decoder = new TextDecoder()
+  
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    const chunk = decoder.decode(value)
+    // Parse SSE format and handle
+  }
+}
+```
+
+---
+
+## UI/UX Guidelines
+
+### Design System
+```css
+/* Color tokens - use CSS variables */
+--color-primary: #0d7377;      /* Deep teal */
+--color-primary-light: #14919b;
+--color-accent: #f59e0b;       /* Warm amber */
+--color-background: #fafaf9;   /* Off-white */
+--color-surface: #ffffff;
+--color-text: #1c1917;
+--color-text-muted: #78716c;
+--color-success: #22c55e;
+--color-warning: #f59e0b;
+--color-error: #ef4444;
+```
+
+### Mobile-First
+- Design for 375px width first
+- Bottom navigation pattern for dashboards
+- Large tap targets (min 44px)
+- Thumb-friendly action placement
+
+### Component Patterns
+```typescript
+// Health State Card (collapsible)
+<HealthStateCard patient={patient} defaultExpanded={false} />
+
+// Chat Message (polymorphic based on type)
+<ChatMessage message={message} />
+
+// Voice Recorder
+<VoiceRecorder onRecordingComplete={(blob) => {}} />
+
+// QR Display
+<SutraQR userId={userId} size={256} />
+```
+
+### Animations
+- Use tw-animate-css classes
+- Subtle fade-in for cards
+- Pulse animation for recording state
+- Skeleton loading states
+
+---
+
+## Common Patterns
+
+### Protected Routes (Patient)
+```typescript
+// In page.tsx
+const supabase = await createClient()
+const { data: { user } } = await supabase.auth.getUser()
+if (!user) redirect('/') 
+const { data: profile } = await supabase.from('users').select().eq('id', user.id).single()
+if (!profile?.onboarded) redirect('/auth/onboarding')
+```
+
+### Anonymous Auth (Doctor)
+```typescript
+// When doctor scans QR without session
+const { data, error } = await supabase.auth.signInAnonymously()
+// Then create/get doctor record
+```
+
+### Real-time Chat
+```typescript
+// Subscribe to new messages
+useEffect(() => {
+  const channel = supabase
+    .channel(`session-${sessionId}`)
+    .on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'messages',
+      filter: `session_id=eq.${sessionId}`
+    }, (payload) => {
+      setMessages(prev => [...prev, payload.new])
+    })
+    .subscribe()
+    
+  return () => { supabase.removeChannel(channel) }
+}, [sessionId])
+```
+
+### Voice Recording
+```typescript
+// Use MediaRecorder API
+const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+mediaRecorder.ondataavailable = (e) => chunks.push(e.data)
+mediaRecorder.onstop = () => {
+  const blob = new Blob(chunks, { type: 'audio/webm' })
+  // Convert to base64 and send to AI backend
+}
+```
+
+---
+
+## Hackathon Speed Tips
+
+### When Stuck
+1. Hardcode first, abstract later
+2. Mock AI responses if backend isn't ready
+3. Use console.log liberally for debugging
+4. Skip error boundaries, focus on happy path
+
+### Quick Wins
+- Use Supabase's built-in auth UI components
+- QR generation: use `qrcode.react` library
+- Audio recording: browser MediaRecorder API
+- Real-time: Supabase Realtime just works
+
+### Things to Skip (for now)
+- Comprehensive error handling
+- Loading state edge cases
+- Offline support
+- Pagination (just load recent)
+- Image optimization
+- SEO metadata
+
+---
+
+## File Templates
+
+### New Page
+```typescript
+// app/example/page.tsx
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+
+export default async function ExamplePage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) redirect('/')
+  
+  return (
+    <main className="min-h-screen bg-background">
+      {/* Content */}
+    </main>
+  )
+}
+```
+
+### New Client Component
+```typescript
+// components/example/ExampleComponent.tsx
+'use client'
+
+import { useState } from 'react'
+
+interface ExampleComponentProps {
+  initialValue: string
+}
+
+export function ExampleComponent({ initialValue }: ExampleComponentProps) {
+  const [value, setValue] = useState(initialValue)
+  
+  return (
+    <div className="p-4">
+      {value}
+    </div>
+  )
+}
+```
+
+### New Server Action
+```typescript
+// app/actions/example.ts
+'use server'
+
+import { createClient } from '@/lib/supabase/server'
+import { revalidatePath } from 'next/cache'
+
+export async function exampleAction(formData: FormData) {
+  const supabase = await createClient()
+  
+  // Do stuff
+  
+  revalidatePath('/example')
+}
+```
+
+---
+
+## Environment Variables
+
+```env
+# .env.local
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+NEXT_PUBLIC_AI_API_URL=http://localhost:8000  # Python backend
+```
+
+---
+
+## Quick Reference
+
+### Supabase CLI
+```bash
+# Generate types from database
+npx supabase gen types typescript --local > lib/database.types.ts
+
+# Run migrations
+npx supabase db push
+
+# Reset database
+npx supabase db reset
+```
+
+### Common Imports
+```typescript
+import { createClient } from '@/lib/supabase/server'  // Server
+import { createClient } from '@/lib/supabase/client'  // Client
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+```
+
+---
+
+## Remember
+
+1. **Ship > Perfect** - Working demo beats clean code
+2. **Core Flow First** - QR scan → Session → Voice → AI Summary
+3. **Mock What's Missing** - Don't block on backend
+4. **Mobile First** - Doctors will scan with phones
+5. **Demo Ready** - Think about the 3-minute pitch
+
+Good luck at MumbaiHacks! 🚀
+
