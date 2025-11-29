@@ -158,4 +158,4 @@ If the backend is unavailable, the app uses mock responses for demo purposes.
 
 ## License
 
-MIT - Built with ❤️ at MumbaiHacks 2024
+MIT - Built with ❤️ at MumbaiHacks 2025
