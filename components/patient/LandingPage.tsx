@@ -53,7 +53,7 @@ export function LandingPage() {
             <div className="absolute inset-0 sutra-gradient rounded-2xl rotate-45 opacity-20" />
             <div className="absolute inset-2 sutra-gradient rounded-xl rotate-12 opacity-30" />
             <div className="absolute inset-4 bg-background rounded-lg flex items-center justify-center">
-              <span className="text-2xl font-bold sutra-gradient-text">S</span>
+              <img src="/Logo.png" alt="Sutra Logo" className="w-12 h-12" />
             </div>
           </div>
         </div>
@@ -115,7 +115,7 @@ export function LandingPage() {
       {/* Footer */}
       <footer className="py-6 text-center">
         <p className="text-xs text-muted-foreground">
-          Built for MumbaiHacks 2024 🚀
+          Built for MumbaiHacks 2025 🚀
         </p>
       </footer>
     </div>
